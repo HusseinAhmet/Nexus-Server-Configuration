@@ -1,0 +1,85 @@
+---
+# tasks file for install nexus
+-  name: update 
+   apt:
+     update_cache: yes
+- name: install openJdk 8
+  apt:
+    name: openjdk-8-jre-headless
+    state: present
+- name: Add the user nexus
+  ansible.builtin.user:
+    name: nexus
+    home: /home/nexus/
+- name: disable password login to user nexus
+  lineinfile:
+    path : /etc/sudoers
+    line: "nexus   ALL=(ALL)       NOPASSWD: ALL"
+
+
+# - name: copy ssh public key to nexus user
+#   copy:
+#     src: /home/ubuntu/.ssh
+#     dest: /home/nexus/
+#     remote_src: true
+#     owner: nexus
+#     group: nexus
+-  name: Make app directory  
+   file:
+        path: /opt/nexus-app
+        state: directory
+
+- name: Download nexus latest
+  ansible.builtin.get_url:
+    url: https://download.sonatype.com/nexus/3/nexus-3.45.0-01-unix.tar.gz
+    dest: /opt/nexus-app/
+
+- name: Unarchive the installer.
+  unarchive:
+    src: /opt/nexus-app/nexus-3.45.0-01-unix.tar.gz
+    dest: /opt/nexus-app/
+    remote_src: yes
+
+- name: find the files you want to rename
+  find:
+    paths: /opt/nexus-app/
+    patterns: "nexus-3*"
+    file_type: directory
+  register: files_to_rename
+
+
+- debug:
+    msg: "{{ files_to_rename.files[0].path  }}"
+
+- name: rename the files from nexus-3-* to nexus
+  copy:
+    src:  "{{ files_to_rename.files[0].path  }}/"
+    dest: /opt/nexus-app/nexus
+    remote_src: yes
+
+
+- name: remove the old directory
+  file:
+    path: "{{ files_to_rename.files[0].path  }}"
+    state: absent
+
+- name: change nexus configs
+  lineinfile:
+    path: /opt/nexus-app/nexus/bin/nexus.rc
+    line: run_as_user="nexus"
+- name: change the ownership to nexus user
+  file:
+    path: /opt/nexus-app
+    state: directory
+    recurse: yes
+    owner: nexus
+    group: nexus
+- name: copy nexus.service
+  copy:
+    src: nexus.service
+    dest: /etc/systemd/system/nexus.service
+- name: enable nexus service on boot 
+  systemd :
+    name: nexus
+    state: started
+    enabled: yes
